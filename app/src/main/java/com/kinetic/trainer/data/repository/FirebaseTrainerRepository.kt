@@ -1,5 +1,6 @@
 package com.kinetic.trainer.data.repository
 
+import android.util.Log
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "FirebaseTrainerRepo"
 
 @Singleton
 class FirebaseTrainerRepository @Inject constructor(
@@ -68,11 +71,12 @@ class FirebaseTrainerRepository @Inject constructor(
                 .limit(50)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null || snapshot == null) {
+                        // Real Firestore error — surface fake data so UI is not blank
                         trySend(FakeTrainerData.activityFeed)
                         return@addSnapshotListener
                     }
-                    val events = snapshot.documents.mapNotNull { it.toActivityEvent() }
-                    trySend(events.ifEmpty { FakeTrainerData.activityFeed })
+                    // Empty is a valid production state (no recent activity)
+                    trySend(snapshot.documents.mapNotNull { it.toActivityEvent() })
                 }
             awaitClose { reg.remove() }
         }
@@ -83,13 +87,15 @@ class FirebaseTrainerRepository @Inject constructor(
         return callbackFlow {
             val reg = gymRef()
                 .collection("members")
+                .whereEqualTo("trainerId", trainerId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null || snapshot == null) {
+                        // Real Firestore error — surface fake data so UI is not blank
                         trySend(FakeTrainerData.clients)
                         return@addSnapshotListener
                     }
-                    val clients = snapshot.documents.mapNotNull { it.toClientSummary() }
-                    trySend(clients.ifEmpty { FakeTrainerData.clients })
+                    // Empty is valid: trainer may have no assigned clients yet
+                    trySend(snapshot.documents.mapNotNull { it.toClientSummary() })
                 }
             awaitClose { reg.remove() }
         }
@@ -126,14 +132,15 @@ class FirebaseTrainerRepository @Inject constructor(
                 val reg = firestore.collection("conversations")
                     .document(conversationId)
                     .collection("messages")
-                    .orderBy("timestampMs", Query.Direction.ASCENDING)
+                    .orderBy("timestamp", Query.Direction.ASCENDING)
                     .addSnapshotListener { snapshot, error ->
                         if (error != null || snapshot == null) {
                             trySend(FakeTrainerData.chatMessages[clientId] ?: emptyList())
                             return@addSnapshotListener
                         }
                         val msgs = snapshot.documents.mapNotNull { it.toChatMessage(keyBase64) }
-                        trySend(msgs.ifEmpty { FakeTrainerData.chatMessages[clientId] ?: emptyList() })
+                        // Empty conversation is valid (no messages yet)
+                        trySend(msgs)
                     }
                 awaitClose { reg.remove() }
             })
@@ -159,7 +166,10 @@ class FirebaseTrainerRepository @Inject constructor(
                 .collection("assignments")
                 .add(workout.toFirestoreMap())
                 .await()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "assignWorkout failed for client=${workout.clientId}", e)
+            throw e
+        }
     }
 
     override suspend fun sendMessage(clientId: String, message: ChatMessage) {
@@ -169,20 +179,37 @@ class FirebaseTrainerRepository @Inject constructor(
             val keyBase64 = getOrCreateConversationKey(conversationId, clientId)
             val ciphertextBase64 = ChatEncryption.encrypt(keyBase64, message.text)
 
+            // Ensure parent conversation doc exists with participants
+            val conversationRef = firestore.collection("conversations").document(conversationId)
+            val conversationDoc = conversationRef.get().await()
+            if (!conversationDoc.exists()) {
+                conversationRef.set(
+                    mapOf(
+                        "participants" to listOf(message.senderId, clientId),
+                        "gymId" to sessionManager.gymId,
+                        "createdAt" to System.currentTimeMillis(),
+                    )
+                ).await()
+            }
+
             firestore.collection("conversations")
                 .document(conversationId)
                 .collection("messages")
                 .document(message.id)
                 .set(
                     mapOf(
-                        "senderId" to message.senderId,
+                        "fromUserId" to message.senderId,
+                        "toUserId" to clientId,
                         "ciphertextBase64" to ciphertextBase64,
-                        "timestampMs" to message.timestampMs,
+                        "timestamp" to message.timestampMs,
                         "isFromTrainer" to message.isFromTrainer,
                         "isRead" to message.isRead,
                     )
                 ).await()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "sendMessage failed for conversation with client=$clientId", e)
+            throw e
+        }
     }
 }
 
@@ -255,7 +282,7 @@ private fun DocumentSnapshot.toClientDetail(): ClientDetail? {
 
 private fun DocumentSnapshot.toChatMessage(keyBase64: String): ChatMessage? {
     return try {
-        val senderId = getString("senderId") ?: return null
+        val senderId = getString("fromUserId") ?: getString("senderId") ?: return null
         val ciphertextBase64 = getString("ciphertextBase64") ?: return null
         val text = try {
             ChatEncryption.decrypt(keyBase64, ciphertextBase64)
@@ -267,7 +294,7 @@ private fun DocumentSnapshot.toChatMessage(keyBase64: String): ChatMessage? {
             id = id,
             senderId = senderId,
             text = text,
-            timestampMs = getLong("timestampMs") ?: System.currentTimeMillis(),
+            timestampMs = getLong("timestamp") ?: getLong("timestampMs") ?: System.currentTimeMillis(),
             isFromTrainer = getBoolean("isFromTrainer") ?: false,
             isRead = getBoolean("isRead") ?: false,
         )
