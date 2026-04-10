@@ -3,7 +3,7 @@ package com.kinetic.trainer.data.models
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 sealed class AuthResult {
-    data class Success(val userId: String) : AuthResult()
+    data class Success(val userId: String, val gymId: String = "") : AuthResult()
     data class Error(val message: String) : AuthResult()
 }
 

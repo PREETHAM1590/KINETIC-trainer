@@ -3,6 +3,7 @@ package com.kinetic.trainer.ui.viewmodels
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinetic.trainer.data.SessionManager
 import com.kinetic.trainer.data.models.ChatMessage
 import com.kinetic.trainer.data.repository.TrainerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +23,8 @@ data class ChatUiState(
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val trainerRepository: TrainerRepository
+    private val trainerRepository: TrainerRepository,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     val clientId: String = savedStateHandle["clientId"] ?: ""
@@ -52,7 +54,7 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val message = ChatMessage(
                 id = UUID.randomUUID().toString(),
-                senderId = "trainer_01",
+                senderId = sessionManager.trainerId,
                 text = text,
                 timestampMs = System.currentTimeMillis(),
                 isFromTrainer = true,
@@ -62,7 +64,7 @@ class ChatViewModel @Inject constructor(
                 messages = _uiState.value.messages + message,
                 inputText = ""
             )
-            trainerRepository.sendMessage(message)
+            trainerRepository.sendMessage(clientId, message)
             onSent()
         }
     }

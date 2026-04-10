@@ -2,6 +2,7 @@ package com.kinetic.trainer.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinetic.trainer.data.SessionManager
 import com.kinetic.trainer.data.models.AuthResult
 import com.kinetic.trainer.data.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,7 +21,8 @@ data class LoginUiState(
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -44,6 +46,8 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = authRepository.signIn(state.email.trim(), state.password)) {
                 is AuthResult.Success -> {
+                    sessionManager.trainerId = result.userId
+                    sessionManager.gymId = result.gymId
                     _uiState.value = _uiState.value.copy(isLoading = false)
                     onSuccess()
                 }

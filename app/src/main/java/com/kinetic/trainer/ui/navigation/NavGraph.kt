@@ -9,14 +9,23 @@ import androidx.navigation.navArgument
 import com.kinetic.trainer.ui.screens.ChatScreen
 import com.kinetic.trainer.ui.screens.ClientDetailScreen
 import com.kinetic.trainer.ui.screens.HomeScreen
+import com.kinetic.trainer.ui.screens.LoginScreen
 import com.kinetic.trainer.ui.screens.WorkoutAssignmentScreen
 
 @Composable
 fun TrainerNavGraph(navController: NavHostController) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = Screen.Login.route
     ) {
+        composable(Screen.Login.route) {
+            LoginScreen(onLoginSuccess = {
+                navController.navigate(Screen.Home.route) {
+                    popUpTo(Screen.Login.route) { inclusive = true }
+                }
+            })
+        }
+
         composable(Screen.Home.route) {
             HomeScreen(
                 onClientClick = { clientId ->

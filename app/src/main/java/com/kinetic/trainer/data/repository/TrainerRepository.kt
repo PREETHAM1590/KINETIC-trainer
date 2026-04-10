@@ -13,9 +13,9 @@ interface TrainerRepository {
     fun observeClientRoster(trainerId: String): Flow<List<ClientSummary>>
     fun observeClientDetail(clientId: String): Flow<ClientDetail?>
     fun observeChatMessages(clientId: String): Flow<List<ChatMessage>>
-    fun getWorkoutTemplates(): List<WorkoutTemplate>
+    suspend fun getWorkoutTemplates(): List<WorkoutTemplate>
     suspend fun assignWorkout(workout: AssignedWorkout)
-    suspend fun sendMessage(message: ChatMessage)
+    suspend fun sendMessage(clientId: String, message: ChatMessage)
 }
 
 @Singleton
@@ -41,15 +41,16 @@ class FakeTrainerRepository @Inject constructor() : TrainerRepository {
         emit(FakeTrainerData.chatMessages[clientId] ?: emptyList())
     }
 
-    override fun getWorkoutTemplates(): List<WorkoutTemplate> = FakeTrainerData.workoutTemplates
+    override suspend fun getWorkoutTemplates(): List<WorkoutTemplate> {
+        delay(200)
+        return FakeTrainerData.workoutTemplates
+    }
 
     override suspend fun assignWorkout(workout: AssignedWorkout) {
         delay(500)
-        // In real impl: Firestore write
     }
 
-    override suspend fun sendMessage(message: ChatMessage) {
+    override suspend fun sendMessage(clientId: String, message: ChatMessage) {
         delay(200)
-        // In real impl: encrypted write to Firestore
     }
 }

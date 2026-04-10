@@ -41,7 +41,8 @@ class AuthRepositoryImpl @Inject constructor(
                 firebaseAuth.signOut()
                 return AuthResult.Error("Access denied: this app is for trainers only")
             }
-            AuthResult.Success(user.uid)
+            val gymId = claims["gymId"] as? String ?: ""
+            AuthResult.Success(userId = user.uid, gymId = gymId)
         } catch (e: Exception) {
             AuthResult.Error(e.message ?: "Sign in failed")
         }

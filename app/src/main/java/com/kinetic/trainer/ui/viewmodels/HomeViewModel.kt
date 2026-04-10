@@ -2,6 +2,7 @@ package com.kinetic.trainer.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinetic.trainer.data.SessionManager
 import com.kinetic.trainer.data.models.ActivityEvent
 import com.kinetic.trainer.data.models.ClientSummary
 import com.kinetic.trainer.data.repository.TrainerRepository
@@ -24,7 +25,8 @@ data class HomeUiState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val trainerRepository: TrainerRepository,
-    private val insightEngine: TrainerInsightEngine
+    private val insightEngine: TrainerInsightEngine,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -35,7 +37,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun loadData() {
-        val trainerId = "trainer_01"
+        val trainerId = sessionManager.trainerId
         viewModelScope.launch {
             trainerRepository.observeActivityFeed(trainerId).collect { feed ->
                 _uiState.value = _uiState.value.copy(activityFeed = feed, isLoading = false)
