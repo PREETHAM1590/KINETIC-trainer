@@ -9,10 +9,12 @@ import androidx.lifecycle.ViewModel;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.kinetic.trainer.data.SessionManager;
 import com.kinetic.trainer.data.repository.AuthRepositoryImpl;
-import com.kinetic.trainer.data.repository.FakeTrainerRepository;
+import com.kinetic.trainer.data.repository.FirebaseTrainerRepository;
 import com.kinetic.trainer.di.AppModule_Companion_ProvideFirebaseAuthFactory;
+import com.kinetic.trainer.di.AppModule_Companion_ProvideFirestoreFactory;
 import com.kinetic.trainer.domain.TrainerInsightEngine;
 import com.kinetic.trainer.ui.viewmodels.ChatViewModel;
 import com.kinetic.trainer.ui.viewmodels.ChatViewModel_HiltModules;
@@ -404,9 +406,9 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
     private static final class LazyClassKeyProvider {
       static String com_kinetic_trainer_ui_viewmodels_HomeViewModel = "com.kinetic.trainer.ui.viewmodels.HomeViewModel";
 
-      static String com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel = "com.kinetic.trainer.ui.viewmodels.WorkoutAssignmentViewModel";
-
       static String com_kinetic_trainer_ui_viewmodels_ChatViewModel = "com.kinetic.trainer.ui.viewmodels.ChatViewModel";
+
+      static String com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel = "com.kinetic.trainer.ui.viewmodels.WorkoutAssignmentViewModel";
 
       static String com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel = "com.kinetic.trainer.ui.viewmodels.ClientDetailViewModel";
 
@@ -416,10 +418,10 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
       HomeViewModel com_kinetic_trainer_ui_viewmodels_HomeViewModel2;
 
       @KeepFieldType
-      WorkoutAssignmentViewModel com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel2;
+      ChatViewModel com_kinetic_trainer_ui_viewmodels_ChatViewModel2;
 
       @KeepFieldType
-      ChatViewModel com_kinetic_trainer_ui_viewmodels_ChatViewModel2;
+      WorkoutAssignmentViewModel com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel2;
 
       @KeepFieldType
       ClientDetailViewModel com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel2;
@@ -480,27 +482,27 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_kinetic_trainer_ui_viewmodels_LoginViewModel = "com.kinetic.trainer.ui.viewmodels.LoginViewModel";
-
-      static String com_kinetic_trainer_ui_viewmodels_ChatViewModel = "com.kinetic.trainer.ui.viewmodels.ChatViewModel";
-
       static String com_kinetic_trainer_ui_viewmodels_HomeViewModel = "com.kinetic.trainer.ui.viewmodels.HomeViewModel";
 
       static String com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel = "com.kinetic.trainer.ui.viewmodels.ClientDetailViewModel";
 
+      static String com_kinetic_trainer_ui_viewmodels_LoginViewModel = "com.kinetic.trainer.ui.viewmodels.LoginViewModel";
+
+      static String com_kinetic_trainer_ui_viewmodels_ChatViewModel = "com.kinetic.trainer.ui.viewmodels.ChatViewModel";
+
       static String com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel = "com.kinetic.trainer.ui.viewmodels.WorkoutAssignmentViewModel";
-
-      @KeepFieldType
-      LoginViewModel com_kinetic_trainer_ui_viewmodels_LoginViewModel2;
-
-      @KeepFieldType
-      ChatViewModel com_kinetic_trainer_ui_viewmodels_ChatViewModel2;
 
       @KeepFieldType
       HomeViewModel com_kinetic_trainer_ui_viewmodels_HomeViewModel2;
 
       @KeepFieldType
       ClientDetailViewModel com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel2;
+
+      @KeepFieldType
+      LoginViewModel com_kinetic_trainer_ui_viewmodels_LoginViewModel2;
+
+      @KeepFieldType
+      ChatViewModel com_kinetic_trainer_ui_viewmodels_ChatViewModel2;
 
       @KeepFieldType
       WorkoutAssignmentViewModel com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel2;
@@ -528,19 +530,19 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
       public T get() {
         switch (id) {
           case 0: // com.kinetic.trainer.ui.viewmodels.ChatViewModel 
-          return (T) new ChatViewModel(viewModelCImpl.savedStateHandle, singletonCImpl.fakeTrainerRepositoryProvider.get(), singletonCImpl.sessionManagerProvider.get());
+          return (T) new ChatViewModel(viewModelCImpl.savedStateHandle, singletonCImpl.firebaseTrainerRepositoryProvider.get(), singletonCImpl.sessionManagerProvider.get());
 
           case 1: // com.kinetic.trainer.ui.viewmodels.ClientDetailViewModel 
-          return (T) new ClientDetailViewModel(viewModelCImpl.savedStateHandle, singletonCImpl.fakeTrainerRepositoryProvider.get());
+          return (T) new ClientDetailViewModel(viewModelCImpl.savedStateHandle, singletonCImpl.firebaseTrainerRepositoryProvider.get());
 
           case 2: // com.kinetic.trainer.ui.viewmodels.HomeViewModel 
-          return (T) new HomeViewModel(singletonCImpl.fakeTrainerRepositoryProvider.get(), singletonCImpl.trainerInsightEngineProvider.get(), singletonCImpl.sessionManagerProvider.get());
+          return (T) new HomeViewModel(singletonCImpl.firebaseTrainerRepositoryProvider.get(), singletonCImpl.trainerInsightEngineProvider.get(), singletonCImpl.sessionManagerProvider.get());
 
           case 3: // com.kinetic.trainer.ui.viewmodels.LoginViewModel 
           return (T) new LoginViewModel(singletonCImpl.authRepositoryImplProvider.get(), singletonCImpl.sessionManagerProvider.get());
 
           case 4: // com.kinetic.trainer.ui.viewmodels.WorkoutAssignmentViewModel 
-          return (T) new WorkoutAssignmentViewModel(viewModelCImpl.savedStateHandle, singletonCImpl.fakeTrainerRepositoryProvider.get());
+          return (T) new WorkoutAssignmentViewModel(viewModelCImpl.savedStateHandle, singletonCImpl.firebaseTrainerRepositoryProvider.get());
 
           default: throw new AssertionError(id);
         }
@@ -622,9 +624,11 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
 
     private final SingletonCImpl singletonCImpl = this;
 
-    private Provider<FakeTrainerRepository> fakeTrainerRepositoryProvider;
+    private Provider<FirebaseFirestore> provideFirestoreProvider;
 
     private Provider<SessionManager> sessionManagerProvider;
+
+    private Provider<FirebaseTrainerRepository> firebaseTrainerRepositoryProvider;
 
     private Provider<TrainerInsightEngine> trainerInsightEngineProvider;
 
@@ -640,11 +644,12 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
 
     @SuppressWarnings("unchecked")
     private void initialize(final ApplicationContextModule applicationContextModuleParam) {
-      this.fakeTrainerRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<FakeTrainerRepository>(singletonCImpl, 0));
-      this.sessionManagerProvider = DoubleCheck.provider(new SwitchingProvider<SessionManager>(singletonCImpl, 1));
-      this.trainerInsightEngineProvider = DoubleCheck.provider(new SwitchingProvider<TrainerInsightEngine>(singletonCImpl, 2));
-      this.provideFirebaseAuthProvider = DoubleCheck.provider(new SwitchingProvider<FirebaseAuth>(singletonCImpl, 4));
-      this.authRepositoryImplProvider = DoubleCheck.provider(new SwitchingProvider<AuthRepositoryImpl>(singletonCImpl, 3));
+      this.provideFirestoreProvider = DoubleCheck.provider(new SwitchingProvider<FirebaseFirestore>(singletonCImpl, 1));
+      this.sessionManagerProvider = DoubleCheck.provider(new SwitchingProvider<SessionManager>(singletonCImpl, 2));
+      this.firebaseTrainerRepositoryProvider = DoubleCheck.provider(new SwitchingProvider<FirebaseTrainerRepository>(singletonCImpl, 0));
+      this.trainerInsightEngineProvider = DoubleCheck.provider(new SwitchingProvider<TrainerInsightEngine>(singletonCImpl, 3));
+      this.provideFirebaseAuthProvider = DoubleCheck.provider(new SwitchingProvider<FirebaseAuth>(singletonCImpl, 5));
+      this.authRepositoryImplProvider = DoubleCheck.provider(new SwitchingProvider<AuthRepositoryImpl>(singletonCImpl, 4));
     }
 
     @Override
@@ -680,19 +685,22 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
       @Override
       public T get() {
         switch (id) {
-          case 0: // com.kinetic.trainer.data.repository.FakeTrainerRepository 
-          return (T) new FakeTrainerRepository();
+          case 0: // com.kinetic.trainer.data.repository.FirebaseTrainerRepository 
+          return (T) new FirebaseTrainerRepository(singletonCImpl.provideFirestoreProvider.get(), singletonCImpl.sessionManagerProvider.get());
 
-          case 1: // com.kinetic.trainer.data.SessionManager 
+          case 1: // com.google.firebase.firestore.FirebaseFirestore 
+          return (T) AppModule_Companion_ProvideFirestoreFactory.provideFirestore();
+
+          case 2: // com.kinetic.trainer.data.SessionManager 
           return (T) new SessionManager(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
 
-          case 2: // com.kinetic.trainer.domain.TrainerInsightEngine 
+          case 3: // com.kinetic.trainer.domain.TrainerInsightEngine 
           return (T) new TrainerInsightEngine();
 
-          case 3: // com.kinetic.trainer.data.repository.AuthRepositoryImpl 
+          case 4: // com.kinetic.trainer.data.repository.AuthRepositoryImpl 
           return (T) new AuthRepositoryImpl(singletonCImpl.provideFirebaseAuthProvider.get());
 
-          case 4: // com.google.firebase.auth.FirebaseAuth 
+          case 5: // com.google.firebase.auth.FirebaseAuth 
           return (T) AppModule_Companion_ProvideFirebaseAuthFactory.provideFirebaseAuth();
 
           default: throw new AssertionError(id);

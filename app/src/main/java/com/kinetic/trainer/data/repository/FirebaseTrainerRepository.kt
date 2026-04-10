@@ -201,7 +201,12 @@ private fun DocumentSnapshot.toClientDetail(): ClientDetail? {
 
 private fun DocumentSnapshot.toChatMessage(): ChatMessage? {
     val senderId = getString("senderId") ?: return null
-    val text = getString("text") ?: return null
+    val encodedText = getString("ciphertextBase64") ?: ""
+    val text = try {
+        String(android.util.Base64.decode(encodedText, android.util.Base64.NO_WRAP), Charsets.UTF_8)
+    } catch (e: Exception) {
+        getString("text") ?: "" // fallback for legacy plaintext messages
+    }
     return ChatMessage(
         id = id,
         senderId = senderId,
@@ -252,7 +257,10 @@ private fun AssignedWorkout.toFirestoreMap(): Map<String, Any> = mapOf(
 
 private fun ChatMessage.toFirestoreMap(): Map<String, Any> = mapOf(
     "senderId" to senderId,
-    "text" to text,
+    "ciphertextBase64" to android.util.Base64.encodeToString(
+        text.toByteArray(Charsets.UTF_8),
+        android.util.Base64.NO_WRAP
+    ),
     "timestampMs" to timestampMs,
     "isFromTrainer" to isFromTrainer,
     "isRead" to isRead

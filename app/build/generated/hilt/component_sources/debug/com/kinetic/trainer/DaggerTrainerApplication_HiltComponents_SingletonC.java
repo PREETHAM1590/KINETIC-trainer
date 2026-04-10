@@ -404,21 +404,18 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_kinetic_trainer_ui_viewmodels_HomeViewModel = "com.kinetic.trainer.ui.viewmodels.HomeViewModel";
-
-      static String com_kinetic_trainer_ui_viewmodels_ChatViewModel = "com.kinetic.trainer.ui.viewmodels.ChatViewModel";
+      static String com_kinetic_trainer_ui_viewmodels_LoginViewModel = "com.kinetic.trainer.ui.viewmodels.LoginViewModel";
 
       static String com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel = "com.kinetic.trainer.ui.viewmodels.WorkoutAssignmentViewModel";
 
       static String com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel = "com.kinetic.trainer.ui.viewmodels.ClientDetailViewModel";
 
-      static String com_kinetic_trainer_ui_viewmodels_LoginViewModel = "com.kinetic.trainer.ui.viewmodels.LoginViewModel";
+      static String com_kinetic_trainer_ui_viewmodels_HomeViewModel = "com.kinetic.trainer.ui.viewmodels.HomeViewModel";
+
+      static String com_kinetic_trainer_ui_viewmodels_ChatViewModel = "com.kinetic.trainer.ui.viewmodels.ChatViewModel";
 
       @KeepFieldType
-      HomeViewModel com_kinetic_trainer_ui_viewmodels_HomeViewModel2;
-
-      @KeepFieldType
-      ChatViewModel com_kinetic_trainer_ui_viewmodels_ChatViewModel2;
+      LoginViewModel com_kinetic_trainer_ui_viewmodels_LoginViewModel2;
 
       @KeepFieldType
       WorkoutAssignmentViewModel com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel2;
@@ -427,7 +424,10 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
       ClientDetailViewModel com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel2;
 
       @KeepFieldType
-      LoginViewModel com_kinetic_trainer_ui_viewmodels_LoginViewModel2;
+      HomeViewModel com_kinetic_trainer_ui_viewmodels_HomeViewModel2;
+
+      @KeepFieldType
+      ChatViewModel com_kinetic_trainer_ui_viewmodels_ChatViewModel2;
     }
   }
 
@@ -482,18 +482,15 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_kinetic_trainer_ui_viewmodels_HomeViewModel = "com.kinetic.trainer.ui.viewmodels.HomeViewModel";
-
       static String com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel = "com.kinetic.trainer.ui.viewmodels.ClientDetailViewModel";
 
       static String com_kinetic_trainer_ui_viewmodels_LoginViewModel = "com.kinetic.trainer.ui.viewmodels.LoginViewModel";
 
       static String com_kinetic_trainer_ui_viewmodels_ChatViewModel = "com.kinetic.trainer.ui.viewmodels.ChatViewModel";
 
-      static String com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel = "com.kinetic.trainer.ui.viewmodels.WorkoutAssignmentViewModel";
+      static String com_kinetic_trainer_ui_viewmodels_HomeViewModel = "com.kinetic.trainer.ui.viewmodels.HomeViewModel";
 
-      @KeepFieldType
-      HomeViewModel com_kinetic_trainer_ui_viewmodels_HomeViewModel2;
+      static String com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel = "com.kinetic.trainer.ui.viewmodels.WorkoutAssignmentViewModel";
 
       @KeepFieldType
       ClientDetailViewModel com_kinetic_trainer_ui_viewmodels_ClientDetailViewModel2;
@@ -503,6 +500,9 @@ public final class DaggerTrainerApplication_HiltComponents_SingletonC {
 
       @KeepFieldType
       ChatViewModel com_kinetic_trainer_ui_viewmodels_ChatViewModel2;
+
+      @KeepFieldType
+      HomeViewModel com_kinetic_trainer_ui_viewmodels_HomeViewModel2;
 
       @KeepFieldType
       WorkoutAssignmentViewModel com_kinetic_trainer_ui_viewmodels_WorkoutAssignmentViewModel2;
