@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,35 +12,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kinetic.trainer.ui.components.KineticCard
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.kinetic.trainer.data.models.ChatMessage
 import com.kinetic.trainer.ui.theme.*
+import com.kinetic.trainer.ui.viewmodels.ChatViewModel
 import java.text.SimpleDateFormat
 import java.util.*
-
-// Note: Real implementation uses Signal Protocol (libsignal-protocol-java)
-// Keys stored in EncryptedSharedPreferences, only ciphertext in Firestore.
-// This screen shows the UI layer; encryption happens in repository layer.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     clientId: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    viewModel: ChatViewModel = hiltViewModel()
 ) {
-    var messageText by remember { mutableStateOf("") }
+    val uiState by viewModel.uiState.collectAsState()
+    val listState = rememberLazyListState()
 
-    // Placeholder messages — replaced by Firestore E2E ciphertext stream in real impl
-    val messages = remember {
-        listOf(
-            FakeChatMessage("trainer", "Hey! Great session today 💪", System.currentTimeMillis() - 3_600_000),
-            FakeChatMessage("client", "Thanks coach! Felt strong on squats 🙌", System.currentTimeMillis() - 3_300_000),
-            FakeChatMessage("trainer", "Exactly — you're ready to bump to 90kg next week", System.currentTimeMillis() - 3_000_000),
-            FakeChatMessage("client", "Let's do it! Same time Thursday?", System.currentTimeMillis() - 2_700_000),
-        )
+    LaunchedEffect(uiState.messages.size) {
+        if (uiState.messages.isNotEmpty()) {
+            listState.animateScrollToItem(uiState.messages.lastIndex)
+        }
     }
 
     Scaffold(
@@ -94,8 +90,8 @@ fun ChatScreen(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     OutlinedTextField(
-                        value = messageText,
-                        onValueChange = { messageText = it },
+                        value = uiState.inputText,
+                        onValueChange = viewModel::onInputChange,
                         placeholder = { Text("Message...", color = TextMuted) },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(24.dp),
@@ -108,35 +104,45 @@ fun ChatScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     IconButton(
-                        onClick = { if (messageText.isNotBlank()) messageText = "" },
+                        onClick = { viewModel.sendMessage {} },
                         modifier = Modifier
                             .size(48.dp)
-                            .background(Lime, RoundedCornerShape(50))
+                            .background(
+                                if (uiState.inputText.isBlank()) Surface2 else Lime,
+                                RoundedCornerShape(50)
+                            ),
+                        enabled = uiState.inputText.isNotBlank()
                     ) {
-                        Icon(Icons.Default.Send, "Send", tint = Background)
+                        Icon(
+                            Icons.Default.Send, "Send",
+                            tint = if (uiState.inputText.isBlank()) TextMuted else Background
+                        )
                     }
                 }
             }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
-            contentPadding = PaddingValues(vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            reverseLayout = false
-        ) {
-            items(messages) { msg ->
-                ChatBubble(msg)
+        if (uiState.isLoading) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Lime)
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp),
+                contentPadding = PaddingValues(vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(uiState.messages, key = { it.id }) { msg ->
+                    ChatBubble(msg, isTrainer = msg.isFromTrainer)
+                }
             }
         }
     }
 }
 
-private data class FakeChatMessage(val sender: String, val text: String, val timestampMs: Long)
-
 @Composable
-private fun ChatBubble(message: FakeChatMessage) {
-    val isTrainer = message.sender == "trainer"
+private fun ChatBubble(message: ChatMessage, isTrainer: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isTrainer) Arrangement.End else Arrangement.Start

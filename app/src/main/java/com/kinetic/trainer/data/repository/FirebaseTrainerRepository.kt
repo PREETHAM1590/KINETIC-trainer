@@ -3,7 +3,6 @@ package com.kinetic.trainer.data.repository
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.SetOptions
 import com.kinetic.trainer.data.ChatEncryption
 import com.kinetic.trainer.data.SessionManager
 import com.kinetic.trainer.data.fake.FakeTrainerData
@@ -26,20 +25,37 @@ class FirebaseTrainerRepository @Inject constructor(
     private fun gymRef() = firestore.collection("gyms").document(sessionManager.gymId)
     private fun isReady() = sessionManager.gymId.isNotEmpty() && sessionManager.trainerId.isNotEmpty()
 
-    private suspend fun getOrCreateConversationKey(conversationId: String): String {
-        val convRef = firestore.collection("conversations").document(conversationId)
-        val snap = convRef.get().await()
+    // Keys are stored in user_keys/{uid}/conversation_keys/{conversationId}
+    // — a separate, per-user collection so key material is never co-located
+    // with the conversation metadata or ciphertext that it protects.
+    private suspend fun getOrCreateConversationKey(
+        conversationId: String,
+        clientId: String,
+    ): String {
+        val trainerId = sessionManager.trainerId
+        val myKeyRef = firestore.collection("user_keys")
+            .document(trainerId)
+            .collection("conversation_keys")
+            .document(conversationId)
+
+        val snap = myKeyRef.get().await()
         val existing = snap.getString("keyBase64")
         if (existing != null) return existing
+
         val newKey = ChatEncryption.generateKeyBase64()
-        convRef.set(
-            mapOf(
-                "keyBase64" to newKey,
-                "gymId" to sessionManager.gymId,
-                "createdAt" to System.currentTimeMillis(),
-            ),
-            SetOptions.merge()
-        ).await()
+        val keyData = mapOf(
+            "keyBase64" to newKey,
+            "createdAt" to System.currentTimeMillis(),
+        )
+        // Write to trainer's own key store
+        myKeyRef.set(keyData).await()
+        // Write a copy to the client's key store so they can decrypt
+        firestore.collection("user_keys")
+            .document(clientId)
+            .collection("conversation_keys")
+            .document(conversationId)
+            .set(keyData).await()
+
         return newKey
     }
 
@@ -101,7 +117,7 @@ class FirebaseTrainerRepository @Inject constructor(
         return flow {
             val conversationId = listOf(sessionManager.trainerId, clientId).sorted().joinToString("_")
             val keyBase64 = try {
-                getOrCreateConversationKey(conversationId)
+                getOrCreateConversationKey(conversationId, clientId)
             } catch (e: Exception) {
                 emit(FakeTrainerData.chatMessages[clientId] ?: emptyList())
                 return@flow
@@ -150,7 +166,7 @@ class FirebaseTrainerRepository @Inject constructor(
         if (!isReady()) return
         try {
             val conversationId = listOf(message.senderId, clientId).sorted().joinToString("_")
-            val keyBase64 = getOrCreateConversationKey(conversationId)
+            val keyBase64 = getOrCreateConversationKey(conversationId, clientId)
             val ciphertextBase64 = ChatEncryption.encrypt(keyBase64, message.text)
 
             firestore.collection("conversations")
