@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.kinetic.trainer.domain.TrainerInsightEngineTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-04-10T01:44:06" hostname="LAPTOP-V71QUBKR" time="0.039">
+  <properties/>
+  <testcase name="WARNING when no workout this week and last assignment over 7 days ago" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.03"/>
+  <testcase name="aggregate INFO when one client has no workout this week" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.001"/>
+  <testcase name="INFO for exceeding targets 4 times consecutively" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.002"/>
+  <testcase name="no INFO when exceeded targets only 3 times" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.001"/>
+  <testcase name="WARNING for performance drop greater than 15 percent" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.002"/>
+  <testcase name="URGENT for 2 consecutive missed sessions" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="URGENT for 3 consecutive missed sessions" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="empty client list produces no insights" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="no insights when all clients healthy" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="aggregate INFO counts multiple clients with no workout" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="no aggregate INFO when all clients have workout this week" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="INFO for exceeding targets 6 times" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="no WARNING for performance drop exactly at threshold" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.001"/>
+  <testcase name="no URGENT when only 1 missed session" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="no individual WARNING when no workout but last assignment within 7 days" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="insights sorted with URGENT first" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.001"/>
+  <testcase name="aggregate insight has null clientId" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="no WARNING for small performance drop" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <testcase name="URGENT insight has clientId set" classname="com.kinetic.trainer.domain.TrainerInsightEngineTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
