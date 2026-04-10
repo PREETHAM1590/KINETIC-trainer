@@ -3,12 +3,15 @@ package com.kinetic.trainer.data.repository
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
+import com.kinetic.trainer.data.ChatEncryption
 import com.kinetic.trainer.data.SessionManager
 import com.kinetic.trainer.data.fake.FakeTrainerData
 import com.kinetic.trainer.data.models.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -22,6 +25,23 @@ class FirebaseTrainerRepository @Inject constructor(
 
     private fun gymRef() = firestore.collection("gyms").document(sessionManager.gymId)
     private fun isReady() = sessionManager.gymId.isNotEmpty() && sessionManager.trainerId.isNotEmpty()
+
+    private suspend fun getOrCreateConversationKey(conversationId: String): String {
+        val convRef = firestore.collection("conversations").document(conversationId)
+        val snap = convRef.get().await()
+        val existing = snap.getString("keyBase64")
+        if (existing != null) return existing
+        val newKey = ChatEncryption.generateKeyBase64()
+        convRef.set(
+            mapOf(
+                "keyBase64" to newKey,
+                "gymId" to sessionManager.gymId,
+                "createdAt" to System.currentTimeMillis(),
+            ),
+            SetOptions.merge()
+        ).await()
+        return newKey
+    }
 
     override fun observeActivityFeed(trainerId: String): Flow<List<ActivityEvent>> {
         if (sessionManager.gymId.isEmpty()) return flow { emit(FakeTrainerData.activityFeed) }
@@ -78,21 +98,29 @@ class FirebaseTrainerRepository @Inject constructor(
 
     override fun observeChatMessages(clientId: String): Flow<List<ChatMessage>> {
         if (!isReady()) return flow { emit(FakeTrainerData.chatMessages[clientId] ?: emptyList()) }
-        return callbackFlow {
-            val reg = gymRef()
-                .collection("trainers").document(sessionManager.trainerId)
-                .collection("chats").document(clientId)
-                .collection("messages")
-                .orderBy("timestampMs", Query.Direction.ASCENDING)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null || snapshot == null) {
-                        trySend(FakeTrainerData.chatMessages[clientId] ?: emptyList())
-                        return@addSnapshotListener
+        return flow {
+            val conversationId = listOf(sessionManager.trainerId, clientId).sorted().joinToString("_")
+            val keyBase64 = try {
+                getOrCreateConversationKey(conversationId)
+            } catch (e: Exception) {
+                emit(FakeTrainerData.chatMessages[clientId] ?: emptyList())
+                return@flow
+            }
+            emitAll(callbackFlow {
+                val reg = firestore.collection("conversations")
+                    .document(conversationId)
+                    .collection("messages")
+                    .orderBy("timestampMs", Query.Direction.ASCENDING)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null || snapshot == null) {
+                            trySend(FakeTrainerData.chatMessages[clientId] ?: emptyList())
+                            return@addSnapshotListener
+                        }
+                        val msgs = snapshot.documents.mapNotNull { it.toChatMessage(keyBase64) }
+                        trySend(msgs.ifEmpty { FakeTrainerData.chatMessages[clientId] ?: emptyList() })
                     }
-                    val msgs = snapshot.documents.mapNotNull { it.toChatMessage() }
-                    trySend(msgs.ifEmpty { FakeTrainerData.chatMessages[clientId] ?: emptyList() })
-                }
-            awaitClose { reg.remove() }
+                awaitClose { reg.remove() }
+            })
         }
     }
 
@@ -121,13 +149,23 @@ class FirebaseTrainerRepository @Inject constructor(
     override suspend fun sendMessage(clientId: String, message: ChatMessage) {
         if (!isReady()) return
         try {
-            gymRef()
-                .collection("trainers").document(sessionManager.trainerId)
-                .collection("chats").document(clientId)
+            val conversationId = listOf(message.senderId, clientId).sorted().joinToString("_")
+            val keyBase64 = getOrCreateConversationKey(conversationId)
+            val ciphertextBase64 = ChatEncryption.encrypt(keyBase64, message.text)
+
+            firestore.collection("conversations")
+                .document(conversationId)
                 .collection("messages")
                 .document(message.id)
-                .set(message.toFirestoreMap())
-                .await()
+                .set(
+                    mapOf(
+                        "senderId" to message.senderId,
+                        "ciphertextBase64" to ciphertextBase64,
+                        "timestampMs" to message.timestampMs,
+                        "isFromTrainer" to message.isFromTrainer,
+                        "isRead" to message.isRead,
+                    )
+                ).await()
         } catch (_: Exception) {}
     }
 }
@@ -199,22 +237,27 @@ private fun DocumentSnapshot.toClientDetail(): ClientDetail? {
     )
 }
 
-private fun DocumentSnapshot.toChatMessage(): ChatMessage? {
-    val senderId = getString("senderId") ?: return null
-    val encodedText = getString("ciphertextBase64") ?: ""
-    val text = try {
-        String(android.util.Base64.decode(encodedText, android.util.Base64.NO_WRAP), Charsets.UTF_8)
+private fun DocumentSnapshot.toChatMessage(keyBase64: String): ChatMessage? {
+    return try {
+        val senderId = getString("senderId") ?: return null
+        val ciphertextBase64 = getString("ciphertextBase64") ?: return null
+        val text = try {
+            ChatEncryption.decrypt(keyBase64, ciphertextBase64)
+        } catch (e: Exception) {
+            // Legacy fallback: try reading plaintext "text" field for old messages
+            getString("text") ?: return null
+        }
+        ChatMessage(
+            id = id,
+            senderId = senderId,
+            text = text,
+            timestampMs = getLong("timestampMs") ?: System.currentTimeMillis(),
+            isFromTrainer = getBoolean("isFromTrainer") ?: false,
+            isRead = getBoolean("isRead") ?: false,
+        )
     } catch (e: Exception) {
-        getString("text") ?: "" // fallback for legacy plaintext messages
+        null
     }
-    return ChatMessage(
-        id = id,
-        senderId = senderId,
-        text = text,
-        timestampMs = getLong("timestampMs") ?: System.currentTimeMillis(),
-        isFromTrainer = getBoolean("isFromTrainer") ?: true,
-        isRead = getBoolean("isRead") ?: false
-    )
 }
 
 @Suppress("UNCHECKED_CAST")
@@ -253,15 +296,4 @@ private fun AssignedWorkout.toFirestoreMap(): Map<String, Any> = mapOf(
             "notes" to ex.notes
         )
     }
-)
-
-private fun ChatMessage.toFirestoreMap(): Map<String, Any> = mapOf(
-    "senderId" to senderId,
-    "ciphertextBase64" to android.util.Base64.encodeToString(
-        text.toByteArray(Charsets.UTF_8),
-        android.util.Base64.NO_WRAP
-    ),
-    "timestampMs" to timestampMs,
-    "isFromTrainer" to isFromTrainer,
-    "isRead" to isRead
 )
