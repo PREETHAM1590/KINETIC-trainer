@@ -1,3 +1,5 @@
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,6 +8,65 @@ plugins {
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
     id("com.google.firebase.firebase-perf")
+}
+
+val googleServicesFile = layout.projectDirectory.file("google-services.json").asFile
+val googleServicesTemplateFile = layout.projectDirectory.file("google-services.json.template").asFile
+val injectedGoogleServicesPath = providers.environmentVariable("GOOGLE_SERVICES_JSON_PATH")
+
+fun isReleaseBuildRequested(taskNames: List<String>): Boolean {
+    if (taskNames.isEmpty()) return false
+    return taskNames.any { task ->
+        val normalized = task.lowercase()
+        (normalized.contains("release") || normalized.contains("bundle") || normalized.contains("publish")) &&
+            !normalized.contains("debug")
+    }
+}
+
+tasks.register("prepareGoogleServicesConfig") {
+    group = "verification"
+    description = "Ensures google-services.json is present via injection or template fallback."
+
+    doLast {
+        val releaseRequested = isReleaseBuildRequested(gradle.startParameter.taskNames)
+        val injectedPath = injectedGoogleServicesPath.orNull?.trim().orEmpty()
+
+        if (injectedPath.isNotEmpty()) {
+            val source = file(injectedPath)
+            if (!source.exists()) {
+                throw GradleException("GOOGLE_SERVICES_JSON_PATH points to missing file: $injectedPath")
+            }
+            source.copyTo(googleServicesFile, overwrite = true)
+        } else if (!googleServicesFile.exists()) {
+            if (releaseRequested) {
+                throw GradleException(
+                    "Missing app/google-services.json for release build. " +
+                        "Set GOOGLE_SERVICES_JSON_PATH to a real config file or add app/google-services.json locally."
+                )
+            }
+            if (!googleServicesTemplateFile.exists()) {
+                throw GradleException(
+                    "Missing app/google-services.json and template fallback app/google-services.json.template."
+                )
+            }
+            googleServicesTemplateFile.copyTo(googleServicesFile, overwrite = true)
+        }
+
+        if (releaseRequested) {
+            val content = googleServicesFile.readText()
+            if (content.contains("template-project-id") || content.contains("template-mobilesdk-app-id")) {
+                throw GradleException(
+                    "Release build requires real Firebase config. Template markers detected in app/google-services.json."
+                )
+            }
+        }
+    }
+}
+
+tasks.matching {
+    it.name == "preBuild" || it.name == "preDebugBuild" || it.name == "preReleaseBuild"
+}.configureEach {
+    dependsOn("prepareGoogleServicesConfig")
 }
 
 
@@ -89,6 +150,8 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-functions-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-appcheck-debug")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("com.google.firebase:firebase-crashlytics-ktx")
     implementation("com.google.firebase:firebase-analytics-ktx")
     implementation("com.google.firebase:firebase-perf-ktx")

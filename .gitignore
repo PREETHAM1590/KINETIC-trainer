@@ -9,7 +9,9 @@ app/build/
 
 # Local config
 local.properties
+app/google-services.json
 
 # OS files
 .DS_Store
 Thumbs.db
+.gitnexus
