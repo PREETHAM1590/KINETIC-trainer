@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.functions.FirebaseFunctions
 import com.kinetic.trainer.data.ChatEncryption
 import com.kinetic.trainer.data.SessionManager
 import com.kinetic.trainer.data.fake.FakeTrainerData
@@ -25,12 +26,43 @@ class FirebaseTrainerRepository @Inject constructor(
     private val sessionManager: SessionManager
 ) : TrainerRepository {
 
+    private val functions: FirebaseFunctions by lazy { FirebaseFunctions.getInstance() }
+
     private fun gymRef() = firestore.collection("gyms").document(sessionManager.gymId)
     private fun isReady() = sessionManager.gymId.isNotEmpty() && sessionManager.trainerId.isNotEmpty()
 
+    private fun buildConversationId(clientId: String): String {
+        val gymId = sessionManager.gymId
+        val trainerId = sessionManager.trainerId
+        check(gymId.isNotEmpty() && trainerId.isNotEmpty() && clientId.isNotEmpty()) {
+            "Session is not ready for chat operations"
+        }
+        val participants = listOf(trainerId, clientId).sorted()
+        return listOf(gymId, participants[0], participants[1]).joinToString("_")
+    }
+
     // Keys are stored in user_keys/{uid}/conversation_keys/{conversationId}
-    // — a separate, per-user collection so key material is never co-located
+    // Separate per-user collection so key material is never co-located
     // with the conversation metadata or ciphertext that it protects.
+    private suspend fun requestBackendKeyBootstrap(
+        conversationId: String,
+        clientId: String,
+        keyBase64: String,
+        createdAt: Long,
+    ) {
+        val payload = hashMapOf<String, Any>(
+            "gymId" to sessionManager.gymId,
+            "toUserId" to clientId,
+            "conversationId" to conversationId,
+            "keyBase64" to keyBase64,
+            "createdAt" to createdAt,
+        )
+        functions
+            .getHttpsCallable("bootstrapConversationKey")
+            .call(payload)
+            .await()
+    }
+
     private suspend fun getOrCreateConversationKey(
         conversationId: String,
         clientId: String,
@@ -43,21 +75,23 @@ class FirebaseTrainerRepository @Inject constructor(
 
         val snap = myKeyRef.get().await()
         val existing = snap.getString("keyBase64")
-        if (existing != null) return existing
+        if (existing != null) {
+            val existingCreatedAt = snap.getLong("createdAt") ?: 0L
+            requestBackendKeyBootstrap(conversationId, clientId, existing, existingCreatedAt)
+            return existing
+        }
 
         val newKey = ChatEncryption.generateKeyBase64()
+        val createdAt = System.currentTimeMillis()
         val keyData = mapOf(
             "keyBase64" to newKey,
-            "createdAt" to System.currentTimeMillis(),
+            "createdAt" to createdAt,
         )
         // Write to trainer's own key store
         myKeyRef.set(keyData).await()
-        // Write a copy to the client's key store so they can decrypt
-        firestore.collection("user_keys")
-            .document(clientId)
-            .collection("conversation_keys")
-            .document(conversationId)
-            .set(keyData).await()
+
+        // Request backend-owned key distribution so clients do not fan out counterpart keys directly.
+        requestBackendKeyBootstrap(conversationId, clientId, newKey, createdAt)
 
         return newKey
     }
@@ -70,9 +104,12 @@ class FirebaseTrainerRepository @Inject constructor(
                 .orderBy("timestampMs", Query.Direction.DESCENDING)
                 .limit(50)
                 .addSnapshotListener { snapshot, error ->
-                    if (error != null || snapshot == null) {
-                        // Real Firestore error — surface fake data so UI is not blank
-                        trySend(FakeTrainerData.activityFeed)
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot == null) {
+                        close(IllegalStateException("Activity feed listener returned null snapshot"))
                         return@addSnapshotListener
                     }
                     // Empty is a valid production state (no recent activity)
@@ -89,9 +126,12 @@ class FirebaseTrainerRepository @Inject constructor(
                 .collection("members")
                 .whereEqualTo("trainerId", trainerId)
                 .addSnapshotListener { snapshot, error ->
-                    if (error != null || snapshot == null) {
-                        // Real Firestore error — surface fake data so UI is not blank
-                        trySend(FakeTrainerData.clients)
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    if (snapshot == null) {
+                        close(IllegalStateException("Client roster listener returned null snapshot"))
                         return@addSnapshotListener
                     }
                     // Empty is valid: trainer may have no assigned clients yet
@@ -108,11 +148,19 @@ class FirebaseTrainerRepository @Inject constructor(
                 .collection("members")
                 .document(clientId)
                 .addSnapshotListener { snapshot, error ->
-                    if (error != null || snapshot == null || !snapshot.exists()) {
-                        trySend(FakeTrainerData.clientDetails[clientId])
+                    if (error != null) {
+                        close(error)
                         return@addSnapshotListener
                     }
-                    trySend(snapshot.toClientDetail() ?: FakeTrainerData.clientDetails[clientId])
+                    if (snapshot == null) {
+                        close(IllegalStateException("Client detail listener returned null snapshot"))
+                        return@addSnapshotListener
+                    }
+                    if (!snapshot.exists()) {
+                        trySend(null)
+                        return@addSnapshotListener
+                    }
+                    trySend(snapshot.toClientDetail())
                 }
             awaitClose { reg.remove() }
         }
@@ -121,12 +169,11 @@ class FirebaseTrainerRepository @Inject constructor(
     override fun observeChatMessages(clientId: String): Flow<List<ChatMessage>> {
         if (!isReady()) return flow { emit(FakeTrainerData.chatMessages[clientId] ?: emptyList()) }
         return flow {
-            val conversationId = listOf(sessionManager.trainerId, clientId).sorted().joinToString("_")
+            val conversationId = buildConversationId(clientId)
             val keyBase64 = try {
                 getOrCreateConversationKey(conversationId, clientId)
             } catch (e: Exception) {
-                emit(FakeTrainerData.chatMessages[clientId] ?: emptyList())
-                return@flow
+                throw IllegalStateException("Failed to initialize conversation key", e)
             }
             emitAll(callbackFlow {
                 val reg = firestore.collection("conversations")
@@ -134,8 +181,12 @@ class FirebaseTrainerRepository @Inject constructor(
                     .collection("messages")
                     .orderBy("timestamp", Query.Direction.ASCENDING)
                     .addSnapshotListener { snapshot, error ->
-                        if (error != null || snapshot == null) {
-                            trySend(FakeTrainerData.chatMessages[clientId] ?: emptyList())
+                        if (error != null) {
+                            close(error)
+                            return@addSnapshotListener
+                        }
+                        if (snapshot == null) {
+                            close(IllegalStateException("Chat listener returned null snapshot"))
                             return@addSnapshotListener
                         }
                         val msgs = snapshot.documents.mapNotNull { it.toChatMessage(keyBase64) }
@@ -173,11 +224,14 @@ class FirebaseTrainerRepository @Inject constructor(
     }
 
     override suspend fun sendMessage(clientId: String, message: ChatMessage) {
-        if (!isReady()) return
+        if (!isReady()) {
+            throw IllegalStateException("Session is not ready for chat operations")
+        }
         try {
-            val conversationId = listOf(message.senderId, clientId).sorted().joinToString("_")
+            val conversationId = buildConversationId(clientId)
             val keyBase64 = getOrCreateConversationKey(conversationId, clientId)
             val ciphertextBase64 = ChatEncryption.encrypt(keyBase64, message.text)
+            val participants = listOf(message.senderId, clientId).sorted()
 
             // Ensure parent conversation doc exists with participants
             val conversationRef = firestore.collection("conversations").document(conversationId)
@@ -185,7 +239,7 @@ class FirebaseTrainerRepository @Inject constructor(
             if (!conversationDoc.exists()) {
                 conversationRef.set(
                     mapOf(
-                        "participants" to listOf(message.senderId, clientId),
+                        "participants" to participants,
                         "gymId" to sessionManager.gymId,
                         "createdAt" to System.currentTimeMillis(),
                     )
@@ -199,9 +253,11 @@ class FirebaseTrainerRepository @Inject constructor(
                 .set(
                     mapOf(
                         "fromUserId" to message.senderId,
+                        "senderId" to message.senderId,
                         "toUserId" to clientId,
                         "ciphertextBase64" to ciphertextBase64,
                         "timestamp" to message.timestampMs,
+                        "timestampMs" to message.timestampMs,
                         "isFromTrainer" to message.isFromTrainer,
                         "isRead" to message.isRead,
                     )
@@ -212,8 +268,7 @@ class FirebaseTrainerRepository @Inject constructor(
         }
     }
 }
-
-// ─── Firestore → Model mappers ────────────────────────────────────────────────
+// Firestore -> Model mappers
 
 private fun DocumentSnapshot.toActivityEvent(): ActivityEvent? {
     val clientId = getString("clientId") ?: return null
@@ -280,6 +335,14 @@ private fun DocumentSnapshot.toClientDetail(): ClientDetail? {
     )
 }
 
+private fun DocumentSnapshot.resolveTimestampMs(vararg fields: String): Long? {
+    for (field in fields) {
+        getLong(field)?.let { return it }
+        getTimestamp(field)?.let { return it.toDate().time }
+    }
+    return null
+}
+
 private fun DocumentSnapshot.toChatMessage(keyBase64: String): ChatMessage? {
     return try {
         val senderId = getString("fromUserId") ?: getString("senderId") ?: return null
@@ -294,7 +357,7 @@ private fun DocumentSnapshot.toChatMessage(keyBase64: String): ChatMessage? {
             id = id,
             senderId = senderId,
             text = text,
-            timestampMs = getLong("timestamp") ?: getLong("timestampMs") ?: System.currentTimeMillis(),
+            timestampMs = resolveTimestampMs("timestamp", "timestampMs") ?: System.currentTimeMillis(),
             isFromTrainer = getBoolean("isFromTrainer") ?: false,
             isRead = getBoolean("isRead") ?: false,
         )
@@ -323,7 +386,7 @@ private fun DocumentSnapshot.toWorkoutTemplate(): WorkoutTemplate? {
         exercises = exercises, durationMinutes = durationMinutes)
 }
 
-// ─── Model → Firestore serializers ────────────────────────────────────────────
+// Model -> Firestore serializers
 
 private fun AssignedWorkout.toFirestoreMap(): Map<String, Any> = mapOf(
     "clientId" to clientId,
