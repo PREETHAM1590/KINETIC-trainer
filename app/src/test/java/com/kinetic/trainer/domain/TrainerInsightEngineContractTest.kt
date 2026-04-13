@@ -42,4 +42,28 @@ class TrainerInsightEngineContractTest {
 
         assertTrue(insights.isEmpty())
     }
+
+    @Test
+    fun contract_empty_client_list_returns_empty_insight_set() {
+        val insights = engine.generateInsights(emptyList())
+
+        assertTrue(insights.isEmpty())
+    }
+
+    @Test
+    fun contract_no_workout_clients_emit_aggregate_info_insight() {
+        val insights = engine.generateInsights(
+            listOf(
+                ClientSummary(
+                    clientId = "c3",
+                    name = "Needs Plan",
+                    hasActiveWorkoutPlan = false,
+                    daysSinceLastVisit = 2,
+                )
+            )
+        )
+
+        val aggregate = insights.firstOrNull { it.clientId == null && it.severity == InsightSeverity.INFO }
+        assertTrue(aggregate != null)
+    }
 }
