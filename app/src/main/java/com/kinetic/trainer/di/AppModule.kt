@@ -6,6 +6,8 @@ import com.kinetic.trainer.data.repository.AuthRepository
 import com.kinetic.trainer.data.repository.AuthRepositoryImpl
 import com.kinetic.trainer.data.repository.FirebaseTrainerRepository
 import com.kinetic.trainer.data.repository.TrainerRepository
+import com.kinetic.trainer.domain.TrainerInsightEngine
+import com.kinetic.trainer.domain.insights.TrainerInsightRuleEngine
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -24,6 +26,10 @@ abstract class AppModule {
     @Binds
     @Singleton
     abstract fun bindAuthRepository(impl: AuthRepositoryImpl): AuthRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTrainerInsightRuleEngine(impl: TrainerInsightEngine): TrainerInsightRuleEngine
 
     companion object {
         @Provides

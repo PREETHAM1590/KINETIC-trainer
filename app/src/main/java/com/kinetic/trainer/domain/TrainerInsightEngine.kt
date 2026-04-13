@@ -1,6 +1,7 @@
 package com.kinetic.trainer.domain
 
 import com.kinetic.trainer.data.models.ClientSummary
+import com.kinetic.trainer.domain.insights.TrainerInsightRuleEngine
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -14,9 +15,9 @@ data class TrainerInsight(
 )
 
 @Singleton
-class TrainerInsightEngine @Inject constructor() {
+class TrainerInsightEngine @Inject constructor() : TrainerInsightRuleEngine {
 
-    fun generateInsights(clients: List<ClientSummary>): List<TrainerInsight> {
+    override fun generateInsights(clients: List<ClientSummary>): List<TrainerInsight> {
         val insights = mutableListOf<TrainerInsight>()
 
         for (client in clients) {
