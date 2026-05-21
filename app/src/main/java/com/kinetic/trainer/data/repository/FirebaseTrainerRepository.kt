@@ -1,13 +1,11 @@
 package com.kinetic.trainer.data.repository
 
-import android.util.Log
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.kinetic.trainer.data.ChatEncryption
 import com.kinetic.trainer.data.SessionManager
-import com.kinetic.trainer.data.fake.FakeTrainerData
 import com.kinetic.trainer.data.models.*
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -15,13 +13,12 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val TAG = "FirebaseTrainerRepo"
-
 @Singleton
-class FirebaseTrainerRepository @Inject constructor(
+class FirebaseTrainerRepository@Inject constructor(
     private val firestore: FirebaseFirestore,
     private val sessionManager: SessionManager
 ) : TrainerRepository {
@@ -32,13 +29,14 @@ class FirebaseTrainerRepository @Inject constructor(
     private fun isReady() = sessionManager.gymId.isNotEmpty() && sessionManager.trainerId.isNotEmpty()
 
     private fun buildConversationId(clientId: String): String {
-        val gymId = sessionManager.gymId
         val trainerId = sessionManager.trainerId
-        check(gymId.isNotEmpty() && trainerId.isNotEmpty() && clientId.isNotEmpty()) {
+        check(trainerId.isNotEmpty() && clientId.isNotEmpty()) {
             "Session is not ready for chat operations"
         }
-        val participants = listOf(trainerId, clientId).sorted()
-        return listOf(gymId, participants[0], participants[1]).joinToString("_")
+        // conversationId = sorted([trainerId, clientId]).join("_")
+        // Must match the isConversationParticipant() rule in firestore.rules which splits on "_"
+        // and checks parts[0] and parts[1] against request.auth.uid.
+        return listOf(trainerId, clientId).sorted().joinToString("_")
     }
 
     // Keys are stored in user_keys/{uid}/conversation_keys/{conversationId}
@@ -97,7 +95,9 @@ class FirebaseTrainerRepository @Inject constructor(
     }
 
     override fun observeActivityFeed(trainerId: String): Flow<List<ActivityEvent>> {
-        if (sessionManager.gymId.isEmpty()) return flow { emit(FakeTrainerData.activityFeed) }
+        if (sessionManager.gymId.isEmpty()) {
+            return flow { emit(emptyList()) }
+        }
         return callbackFlow {
             val reg = gymRef()
                 .collection("activityFeed")
@@ -120,7 +120,9 @@ class FirebaseTrainerRepository @Inject constructor(
     }
 
     override fun observeClientRoster(trainerId: String): Flow<List<ClientSummary>> {
-        if (sessionManager.gymId.isEmpty()) return flow { emit(FakeTrainerData.clients) }
+        if (sessionManager.gymId.isEmpty()) {
+            return flow { emit(emptyList()) }
+        }
         return callbackFlow {
             val reg = gymRef()
                 .collection("members")
@@ -142,7 +144,9 @@ class FirebaseTrainerRepository @Inject constructor(
     }
 
     override fun observeClientDetail(clientId: String): Flow<ClientDetail?> {
-        if (sessionManager.gymId.isEmpty()) return flow { emit(FakeTrainerData.clientDetails[clientId]) }
+        if (sessionManager.gymId.isEmpty()) {
+            return flow { emit(null) }
+        }
         return callbackFlow {
             val reg = gymRef()
                 .collection("members")
@@ -160,14 +164,36 @@ class FirebaseTrainerRepository @Inject constructor(
                         trySend(null)
                         return@addSnapshotListener
                     }
-                    trySend(snapshot.toClientDetail())
+                    val detail = snapshot.toClientDetail() ?: run { trySend(null); return@addSnapshotListener }
+                    // Fetch latest workout history from users/{clientId}/workout_history
+                    firestore.collection("users").document(clientId)
+                        .collection("workout_history")
+                        .orderBy("completedAtMs", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(1)
+                        .get()
+                        .addOnSuccessListener { historySnap ->
+                            val lastDoc = historySnap.documents.firstOrNull()
+                            val lastSession = lastDoc?.let { doc ->
+                                CompletedWorkout(
+                                    clientId = clientId,
+                                    completedAtMs = doc.getLong("completedAtMs") ?: 0L,
+                                    exercises = emptyList(),
+                                    durationMins = doc.getLong("durationMin")?.toInt() ?: 0,
+                                    caloriesBurned = doc.getLong("caloriesBurned")?.toInt() ?: 0
+                                )
+                            }
+                            trySend(detail.copy(lastSessionActual = lastSession))
+                        }
+                        .addOnFailureListener { trySend(detail) }
                 }
             awaitClose { reg.remove() }
         }
     }
 
     override fun observeChatMessages(clientId: String): Flow<List<ChatMessage>> {
-        if (!isReady()) return flow { emit(FakeTrainerData.chatMessages[clientId] ?: emptyList()) }
+        if (!isReady()) {
+            return flow { emit(emptyList()) }
+        }
         return flow {
             val conversationId = buildConversationId(clientId)
             val keyBase64 = try {
@@ -199,18 +225,18 @@ class FirebaseTrainerRepository @Inject constructor(
     }
 
     override suspend fun getWorkoutTemplates(): List<WorkoutTemplate> {
-        if (sessionManager.gymId.isEmpty()) return FakeTrainerData.workoutTemplates
+        check(sessionManager.gymId.isNotEmpty()) { "Trainer session not initialized" }
         return try {
             val snapshot = gymRef().collection("workoutTemplates").get().await()
-            val templates = snapshot.documents.mapNotNull { it.toWorkoutTemplate() }
-            templates.ifEmpty { FakeTrainerData.workoutTemplates }
-        } catch (_: Exception) {
-            FakeTrainerData.workoutTemplates
+            snapshot.documents.mapNotNull { it.toWorkoutTemplate() }
+        } catch (e: Exception) {
+            Timber.e(e, "getWorkoutTemplates failed")
+            throw e
         }
     }
 
     override suspend fun assignWorkout(workout: AssignedWorkout) {
-        if (sessionManager.gymId.isEmpty()) return
+        check(sessionManager.gymId.isNotEmpty()) { "Trainer session not initialized: cannot assign workout" }
         try {
             gymRef()
                 .collection("members").document(workout.clientId)
@@ -218,7 +244,7 @@ class FirebaseTrainerRepository @Inject constructor(
                 .add(workout.toFirestoreMap())
                 .await()
         } catch (e: Exception) {
-            Log.e(TAG, "assignWorkout failed for client=${workout.clientId}", e)
+            Timber.e(e, "assignWorkout failed for client=${workout.clientId}")
             throw e
         }
     }
@@ -263,7 +289,7 @@ class FirebaseTrainerRepository @Inject constructor(
                     )
                 ).await()
         } catch (e: Exception) {
-            Log.e(TAG, "sendMessage failed for conversation with client=$clientId", e)
+            Timber.e(e, "sendMessage failed for conversation with client=$clientId")
             throw e
         }
     }
@@ -350,8 +376,7 @@ private fun DocumentSnapshot.toChatMessage(keyBase64: String): ChatMessage? {
         val text = try {
             ChatEncryption.decrypt(keyBase64, ciphertextBase64)
         } catch (e: Exception) {
-            // Legacy fallback: try reading plaintext "text" field for old messages
-            getString("text") ?: return null
+            "[Unable to decrypt message]"
         }
         ChatMessage(
             id = id,
