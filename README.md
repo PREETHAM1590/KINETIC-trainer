@@ -1,100 +1,107 @@
-# KINETIC Trainer
+# KINETIC Trainer 🏆
 
-Android trainer app for the KINETIC platform.
+> The trainer companion app — manage clients, assign workouts, chat securely, and track member progress.
 
-## Overview
-KINETIC Trainer is used by gym trainers to:
-- authenticate into trainer workflows
-- view assigned clients
-- inspect client details
-- assign workouts
-- send secure chat messages to clients
+![Android](https://img.shields.io/badge/Android-Kotlin-green?logo=android)
+![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-blue?logo=jetpackcompose)
+![Firebase](https://img.shields.io/badge/Backend-Firebase-orange?logo=firebase)
+![E2E Encrypted](https://img.shields.io/badge/Chat-E2E%20Encrypted-purple?logo=lock)
 
-## Tech Stack
-- Kotlin, Jetpack Compose, Material 3
-- Hilt (dependency injection)
-- Firebase Auth, Firestore, Firebase Messaging
-- DataStore + Android Security Crypto
-- Signal Protocol Android library for encrypted chat payload handling
-- Min SDK 26, Target SDK 35, Java 17
+---
 
-## Prerequisites
-- Android Studio (latest stable recommended)
-- JDK 17
-- Android SDK 35
-- Firebase project configured for Android + FCM
-- Firebase config provided via `GOOGLE_SERVICES_JSON_PATH` or local `app/google-services.json`
+## ✨ Features
 
-## Setup
+### 👥 Client Management
+- Real-time client list with health stats (streak, injuries, missed sessions)
+- Client detail view with workout history and progress
+- AI-powered insights (missed workouts, plateaus, achievements)
 
-```powershell
-cd kinetic-trainer
+### 📋 Workout Assignment
+- Create custom workout plans from 300+ exercise library
+- Assign workouts to individual members
+- Template library for quick assignment
+- Members get push notification on new assignment
+
+### 💬 Secure Chat
+- End-to-end encrypted messaging (AES-256-GCM)
+- Key exchange via Cloud Function
+- Real-time message delivery
+- Notification deep-linking (tap → opens chat)
+
+### 🔔 Smart Notifications
+- New message alerts
+- Client missed session warnings
+- Personal best celebrations
+- Android 13+ runtime permission handling
+
+---
+
+## 🏗️ Architecture
+
+```
+app/
+├── data/
+│   ├── models/          # ClientSummary, ClientDetail, ChatMessage, etc.
+│   ├── repository/      # FirebaseTrainerRepository, AuthRepository
+│   ├── ChatEncryption.kt  # AES-256-GCM E2E encryption
+│   └── SessionManager.kt  # Trainer session state
+├── domain/
+│   ├── TrainerInsightEngine.kt  # Rule-based client insights
+│   └── errors/          # DomainError hierarchy
+├── ui/
+│   ├── screens/         # Home, ClientDetail, Chat, WorkoutAssignment
+│   ├── viewmodels/      # MVVM ViewModels
+│   ├── components/      # Reusable UI components
+│   ├── navigation/      # NavGraph with deep-link support
+│   └── theme/           # Dark theme
+├── service/
+│   └── TrainerMessagingService.kt  # FCM with retry logic
+└── MainActivity.kt
 ```
 
-1. Preferred: set `GOOGLE_SERVICES_JSON_PATH` to a real Firebase config file path.
-2. Alternative: copy your Firebase file to `app/google-services.json`.
-3. For debug-only local runs without real credentials, copy `app/google-services.json.template` to `app/google-services.json`.
-4. Sync Gradle in Android Studio or run from CLI.
+**Tech Stack:**
+- Kotlin + Jetpack Compose
+- MVVM + Repository Pattern
+- Hilt (DI)
+- Firebase Auth, Firestore, Cloud Functions, FCM
+- AES-256-GCM encryption
+- Timber (logging)
 
-Example (PowerShell):
+---
 
-```powershell
-$env:GOOGLE_SERVICES_JSON_PATH = "D:/secrets/kinetic-trainer-google-services.json"
+## 🚀 Getting Started
+
+```bash
+git clone https://github.com/PREETHAM1590/KINETIC-trainer.git
+cd KINETIC-trainer
 ```
 
-Release builds fail fast if template values are detected.
+1. Place `google-services.json` in `app/` (or set `GOOGLE_SERVICES_JSON_PATH` env var)
+2. Build:
+   ```bash
+   ./gradlew assembleDebug
+   ```
 
-## Run And Test
+---
 
-```powershell
-cd kinetic-trainer
-.\gradlew assembleDebug
-.\gradlew installDebug
-.\gradlew testDebugUnitTest
-.\gradlew :app:assembleRelease
-```
+## 🔒 Security
 
-Optional instrumentation tests:
+- Chat messages encrypted client-side before Firestore write
+- ProGuard obfuscation enabled in release builds
+- Firebase App Check (Play Integrity) in production
+- No plaintext fallback — failed decryption shows `[Unable to decrypt]`
 
-```powershell
-.\gradlew connectedDebugAndroidTest
-```
+---
 
-## Firebase Config Hygiene
+## 🔗 Related Repos
 
-- `app/google-services.json` is intentionally ignored by git.
-- CI should inject config with `GOOGLE_SERVICES_JSON_PATH` using a secret-backed file.
-- Verify ignore behavior:
+| Repo | Description |
+|------|-------------|
+| [KINETIC](https://github.com/PREETHAM1590/KINETIC) | Member fitness app |
+| [KINETIC-admin](https://github.com/PREETHAM1590/KINETIC-admin) | Admin dashboard |
 
-```powershell
-git check-ignore -v app/google-services.json
-```
+---
 
-## Navigation Flow
-- Login
-- Home (client list)
-- Client Detail
-- Workout Assignment
-- Chat
+## 📄 License
 
-## Project Structure
-
-```text
-kinetic-trainer/
-  app/
-    src/main/java/com/kinetic/trainer/
-      data/
-      di/
-      domain/
-      ui/navigation/
-      ui/screens/
-      ui/viewmodels/
-    src/test/
-  gradle/
-  build.gradle.kts
-  settings.gradle.kts
-```
-
-## Branching
-- Default branch: master (current remote setup)
-- Use feature branches and raise PRs into master
+Private — All rights reserved.
