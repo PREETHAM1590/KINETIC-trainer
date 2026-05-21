@@ -1,7 +1,7 @@
 package com.kinetic.trainer.data
 
-import android.util.Base64
 import java.security.SecureRandom
+import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.GCMParameterSpec
@@ -17,7 +17,7 @@ object ChatEncryption {
     fun generateKeyBase64(): String {
         val kg = KeyGenerator.getInstance("AES")
         kg.init(KEY_SIZE_BITS, SecureRandom())
-        return Base64.encodeToString(kg.generateKey().encoded, Base64.NO_WRAP)
+        return Base64.getEncoder().encodeToString(kg.generateKey().encoded)
     }
 
     /**
@@ -25,7 +25,7 @@ object ChatEncryption {
      * Returns a Base64-encoded blob: 12-byte IV || AES-GCM ciphertext+tag.
      */
     fun encrypt(keyBase64: String, plaintext: String): String {
-        val keyBytes = Base64.decode(keyBase64, Base64.NO_WRAP)
+        val keyBytes = Base64.getDecoder().decode(keyBase64)
         val key = SecretKeySpec(keyBytes, "AES")
         val iv = ByteArray(IV_SIZE_BYTES).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance(ALGORITHM)
@@ -34,7 +34,7 @@ object ChatEncryption {
         val blob = ByteArray(iv.size + encrypted.size)
         System.arraycopy(iv, 0, blob, 0, iv.size)
         System.arraycopy(encrypted, 0, blob, iv.size, encrypted.size)
-        return Base64.encodeToString(blob, Base64.NO_WRAP)
+        return Base64.getEncoder().encodeToString(blob)
     }
 
     /**
@@ -42,9 +42,9 @@ object ChatEncryption {
      * Returns plaintext string. Throws on tampered/invalid data.
      */
     fun decrypt(keyBase64: String, ciphertextBase64: String): String {
-        val keyBytes = Base64.decode(keyBase64, Base64.NO_WRAP)
+        val keyBytes = Base64.getDecoder().decode(keyBase64)
         val key = SecretKeySpec(keyBytes, "AES")
-        val blob = Base64.decode(ciphertextBase64, Base64.NO_WRAP)
+        val blob = Base64.getDecoder().decode(ciphertextBase64)
         val iv = blob.copyOfRange(0, IV_SIZE_BYTES)
         val ciphertext = blob.copyOfRange(IV_SIZE_BYTES, blob.size)
         val cipher = Cipher.getInstance(ALGORITHM)

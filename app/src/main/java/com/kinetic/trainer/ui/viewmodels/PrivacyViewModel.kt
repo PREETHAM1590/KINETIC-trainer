@@ -2,14 +2,22 @@ package com.kinetic.trainer.ui.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.functions.FirebaseFunctionsException
+import com.kinetic.trainer.data.repository.ConsentSource
 import com.kinetic.trainer.data.repository.DeletionStatusData
 import com.kinetic.trainer.data.repository.PrivacyRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+enum class ExportFormat(val wireValue: String) {
+    JSON("json"),
+    CSV("csv"),
+}
 
 data class PrivacyUiState(
     val isLoading: Boolean = true,
@@ -36,6 +44,20 @@ class PrivacyViewModel @Inject constructor(
         refreshAll()
     }
 
+    private fun toUserMessage(error: Throwable, fallback: String): String {
+        return when (error) {
+            is IOException -> "Network unavailable. Check your connection and try again."
+            is SecurityException -> "Session expired. Please sign in again."
+            is FirebaseFunctionsException -> when (error.code) {
+                FirebaseFunctionsException.Code.UNAUTHENTICATED -> "Session expired. Please sign in again."
+                FirebaseFunctionsException.Code.PERMISSION_DENIED -> "You do not have permission to change this setting."
+                FirebaseFunctionsException.Code.UNAVAILABLE -> "Privacy service is temporarily unavailable. Please retry."
+                else -> error.message ?: fallback
+            }
+            else -> error.message ?: fallback
+        }
+    }
+
     fun refreshAll() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, message = null)
@@ -49,11 +71,12 @@ class PrivacyViewModel @Inject constructor(
                     crashReportingEnabled = consent.crashReportingEnabled,
                     consentVersion = consent.version,
                     deletionStatus = deletionStatus,
+                    error = null,
                 )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Failed to load privacy settings",
+                    error = toUserMessage(e, "Failed to load privacy settings"),
                 )
             }
         }
@@ -80,6 +103,7 @@ class PrivacyViewModel @Inject constructor(
                     analyticsEnabled = state.analyticsEnabled,
                     marketingEnabled = state.marketingEnabled,
                     crashReportingEnabled = state.crashReportingEnabled,
+                    source = ConsentSource.SETTINGS_CHANGE,
                 )
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
@@ -88,17 +112,17 @@ class PrivacyViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
-                    error = e.message ?: "Failed to save consent",
+                    error = toUserMessage(e, "Failed to save consent"),
                 )
             }
         }
     }
 
-    fun requestDataExport() {
+    fun requestDataExport(format: ExportFormat = ExportFormat.JSON) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSaving = true, error = null, message = null)
             try {
-                val exportId = privacyRepository.requestDataExport()
+                val exportId = privacyRepository.requestDataExport(format = format.wireValue)
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
                     latestExportId = exportId,
@@ -111,7 +135,7 @@ class PrivacyViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
-                    error = e.message ?: "Failed to request export",
+                    error = toUserMessage(e, "Failed to request export"),
                 )
             }
         }
@@ -123,7 +147,9 @@ class PrivacyViewModel @Inject constructor(
                 val status = privacyRepository.getDeletionStatus()
                 _uiState.value = _uiState.value.copy(deletionStatus = status, error = null)
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(error = e.message ?: "Failed to load deletion status")
+                _uiState.value = _uiState.value.copy(
+                    error = toUserMessage(e, "Failed to load deletion status"),
+                )
             }
         }
     }
@@ -140,7 +166,7 @@ class PrivacyViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isSaving = false,
-                    error = e.message ?: "Failed to disable push notifications",
+                    error = toUserMessage(e, "Failed to disable push notifications"),
                 )
             }
         }

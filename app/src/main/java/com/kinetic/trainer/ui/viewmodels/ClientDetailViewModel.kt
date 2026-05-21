@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -35,13 +36,20 @@ class ClientDetailViewModel @Inject constructor(
 
     private fun loadClientDetail() {
         viewModelScope.launch {
-            trainerRepository.observeClientDetail(clientId).collect { detail ->
-                _uiState.value = if (detail != null) {
-                    ClientDetailUiState(detail = detail, isLoading = false)
-                } else {
-                    ClientDetailUiState(isLoading = false, error = "Client not found")
+            trainerRepository.observeClientDetail(clientId)
+                .catch { error ->
+                    _uiState.value = ClientDetailUiState(
+                        isLoading = false,
+                        error = error.message ?: "Failed to load client details",
+                    )
                 }
-            }
+                .collect { detail ->
+                    _uiState.value = if (detail != null) {
+                        ClientDetailUiState(detail = detail, isLoading = false)
+                    } else {
+                        ClientDetailUiState(isLoading = false, error = "Client not found")
+                    }
+                }
         }
     }
 }

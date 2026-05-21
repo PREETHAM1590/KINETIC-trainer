@@ -2,6 +2,8 @@ package com.kinetic.trainer.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.functions.ktx.functions
+import com.google.firebase.ktx.Firebase
 import com.kinetic.trainer.data.models.AuthResult
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -9,6 +11,8 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val ROLE_TRAINER = "trainer"
 
 interface AuthRepository {
     val currentUser: Flow<FirebaseUser?>
@@ -37,7 +41,7 @@ class AuthRepositoryImpl @Inject constructor(
             val tokenResult = user.getIdToken(true).await()
             val claims = tokenResult.claims
             val role = claims["role"] as? String
-            if (role != "trainer") {
+            if (role != ROLE_TRAINER) {
                 firebaseAuth.signOut()
                 return AuthResult.Error("Access denied: this app is for trainers only")
             }
@@ -49,8 +53,17 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun signOut() {
+        try {
+            Firebase.functions
+                .getHttpsCallable("unregisterFcmToken")
+                .call(mapOf("reason" to "logout"))
+                .await()
+        } catch (_: Exception) {
+            // Keep logout resilient even when token cleanup fails.
+        }
         firebaseAuth.signOut()
     }
 
     override fun isSignedIn(): Boolean = firebaseAuth.currentUser != null
 }
+

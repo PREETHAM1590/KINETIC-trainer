@@ -1,10 +1,15 @@
 package com.kinetic.trainer.data.repository
 
+import android.util.Log
 import com.google.firebase.functions.ktx.functions
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+
+enum class ConsentSource(val wireValue: String) {
+    SETTINGS_CHANGE("settings_change"),
+}
 
 data class ConsentPreferences(
     val analyticsEnabled: Boolean = false,
@@ -19,22 +24,120 @@ data class DeletionStatusData(
     val completed: Boolean = false,
 )
 
+private const val TAG = "PrivacyRepository"
+
+private fun warn(message: String) {
+    try {
+        Log.w(TAG, message)
+    } catch (_: RuntimeException) {
+        // android.util.Log is unavailable in plain JVM unit tests.
+    }
+}
+
+private fun nestedMap(parent: Map<*, *>?, key: String): Map<*, *>? {
+    if (parent == null) return null
+    val raw = parent[key] ?: return null
+    return if (raw is Map<*, *>) {
+        raw
+    } else {
+        warn("Unexpected type for '$key': ${raw::class.java.simpleName}")
+        null
+    }
+}
+
+private fun boolValue(map: Map<*, *>, key: String, default: Boolean): Boolean {
+    val raw = map[key] ?: return default
+    return when (raw) {
+        is Boolean -> raw
+        is Number -> {
+            val converted = raw.toInt() != 0
+            warn("Coerced numeric boolean for '$key': $raw -> $converted")
+            converted
+        }
+        is String -> {
+            val normalized = raw.trim().lowercase()
+            when (normalized) {
+                "true", "1", "yes" -> {
+                    warn("Coerced string boolean for '$key': $raw -> true")
+                    true
+                }
+                "false", "0", "no" -> {
+                    warn("Coerced string boolean for '$key': $raw -> false")
+                    false
+                }
+                else -> {
+                    warn("Invalid boolean payload for '$key': $raw")
+                    default
+                }
+            }
+        }
+        else -> {
+            warn("Invalid boolean payload for '$key': ${raw::class.java.simpleName}")
+            default
+        }
+    }
+}
+
+private fun intValue(map: Map<*, *>, key: String, default: Int): Int {
+    val raw = map[key] ?: return default
+    return when (raw) {
+        is Number -> raw.toInt()
+        is String -> raw.toIntOrNull()?.also {
+            warn("Coerced string number for '$key': $raw -> $it")
+        } ?: run {
+            warn("Invalid int payload for '$key': $raw")
+            default
+        }
+        else -> {
+            warn("Invalid int payload for '$key': ${raw::class.java.simpleName}")
+            default
+        }
+    }
+}
+
+private fun longValue(map: Map<*, *>, key: String): Long? {
+    val raw = map[key] ?: return null
+    return when (raw) {
+        is Number -> raw.toLong()
+        is String -> raw.toLongOrNull()?.also {
+            warn("Coerced string long for '$key': $raw -> $it")
+        } ?: run {
+            warn("Invalid long payload for '$key': $raw")
+            null
+        }
+        else -> {
+            warn("Invalid long payload for '$key': ${raw::class.java.simpleName}")
+            null
+        }
+    }
+}
+
+private fun stringValue(map: Map<*, *>, key: String, default: String): String {
+    val raw = map[key] ?: return default
+    return if (raw is String) {
+        raw
+    } else {
+        warn("Invalid string payload for '$key': ${raw::class.java.simpleName}")
+        default
+    }
+}
+
 internal fun mapConsentPayload(raw: Map<*, *>?): ConsentPreferences {
-    val consent = raw?.get("consent") as? Map<*, *> ?: return ConsentPreferences()
+    val consent = nestedMap(raw, "consent") ?: return ConsentPreferences()
     return ConsentPreferences(
-        analyticsEnabled = consent["analyticsEnabled"] as? Boolean ?: false,
-        marketingEnabled = consent["marketingEnabled"] as? Boolean ?: false,
-        crashReportingEnabled = consent["crashReportingEnabled"] as? Boolean ?: true,
-        version = (consent["version"] as? Number)?.toInt() ?: 1,
+        analyticsEnabled = boolValue(consent, "analyticsEnabled", default = false),
+        marketingEnabled = boolValue(consent, "marketingEnabled", default = false),
+        crashReportingEnabled = boolValue(consent, "crashReportingEnabled", default = true),
+        version = intValue(consent, "version", default = 1),
     )
 }
 
 internal fun mapDeletionStatusPayload(raw: Map<*, *>?): DeletionStatusData {
-    val status = raw?.get("status") as? Map<*, *> ?: return DeletionStatusData()
-    val state = status["status"] as? String ?: "unknown"
+    val status = nestedMap(raw, "status") ?: return DeletionStatusData()
+    val state = stringValue(status, "status", default = "unknown")
     return DeletionStatusData(
         status = state,
-        backendClearedAt = (status["backendClearedAt"] as? Number)?.toLong(),
+        backendClearedAt = longValue(status, "backendClearedAt"),
         completed = state == "verified_complete",
     )
 }
@@ -56,7 +159,7 @@ class PrivacyRepository @Inject constructor() {
         analyticsEnabled: Boolean,
         marketingEnabled: Boolean,
         crashReportingEnabled: Boolean,
-        source: String = "trainer_settings_change",
+        source: ConsentSource = ConsentSource.SETTINGS_CHANGE,
     ) {
         Firebase.functions
             .getHttpsCallable("updateUserConsent")
@@ -65,7 +168,7 @@ class PrivacyRepository @Inject constructor() {
                     "analyticsEnabled" to analyticsEnabled,
                     "marketingEnabled" to marketingEnabled,
                     "crashReportingEnabled" to crashReportingEnabled,
-                    "source" to source,
+                    "source" to source.wireValue,
                 ),
             )
             .await()

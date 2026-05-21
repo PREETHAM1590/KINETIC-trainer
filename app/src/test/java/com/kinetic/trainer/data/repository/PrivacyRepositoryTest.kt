@@ -35,6 +35,25 @@ class PrivacyRepositoryTest {
     }
 
     @Test
+    fun mapConsentPayload_coerces_supported_string_and_numeric_values() {
+        val consent = mapConsentPayload(
+            mapOf(
+                "consent" to mapOf(
+                    "analyticsEnabled" to "1",
+                    "marketingEnabled" to "true",
+                    "crashReportingEnabled" to 0,
+                    "version" to "9",
+                )
+            )
+        )
+
+        assertThat(consent.analyticsEnabled).isTrue()
+        assertThat(consent.marketingEnabled).isTrue()
+        assertThat(consent.crashReportingEnabled).isFalse()
+        assertThat(consent.version).isEqualTo(9)
+    }
+
+    @Test
     fun mapDeletionStatusPayload_marks_completion_only_for_verified_state() {
         val pending = mapDeletionStatusPayload(mapOf("status" to mapOf("status" to "client_cleanup_pending")))
         val completed = mapDeletionStatusPayload(mapOf("status" to mapOf("status" to "verified_complete")))

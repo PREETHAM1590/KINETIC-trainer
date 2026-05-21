@@ -83,40 +83,59 @@ fun ChatScreen(
         },
         bottomBar = {
             Surface(color = Surface1, tonalElevation = 4.dp) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .navigationBarsPadding(),
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    OutlinedTextField(
-                        value = uiState.inputText,
-                        onValueChange = viewModel::onInputChange,
-                        placeholder = { Text("Message...", color = TextMuted) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Lime, unfocusedBorderColor = Surface2,
-                            focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
-                            focusedContainerColor = Surface2, unfocusedContainerColor = Surface2
-                        ),
-                        maxLines = 4
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(
-                        onClick = { viewModel.sendMessage {} },
+                Column {
+                    // Send-error banner — dismissed automatically when the user retries
+                    uiState.sendError?.let { errorMsg ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = errorMsg,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                    Row(
                         modifier = Modifier
-                            .size(48.dp)
-                            .background(
-                                if (uiState.inputText.isBlank()) Surface2 else Lime,
-                                RoundedCornerShape(50)
-                            ),
-                        enabled = uiState.inputText.isNotBlank()
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .navigationBarsPadding(),
+                        verticalAlignment = Alignment.Bottom
                     ) {
-                        Icon(
-                            Icons.Default.Send, "Send",
-                            tint = if (uiState.inputText.isBlank()) TextMuted else Background
+                        OutlinedTextField(
+                            value = uiState.inputText,
+                            onValueChange = {
+                                viewModel.clearSendError()
+                                viewModel.onInputChange(it)
+                            },
+                            placeholder = { Text("Message...", color = TextMuted) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Lime, unfocusedBorderColor = Surface2,
+                                focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+                                focusedContainerColor = Surface2, unfocusedContainerColor = Surface2
+                            ),
+                            maxLines = 4
                         )
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(
+                            onClick = { viewModel.sendMessage {} },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .background(
+                                    if (uiState.inputText.isBlank()) Surface2 else Lime,
+                                    RoundedCornerShape(50)
+                                ),
+                            enabled = uiState.inputText.isNotBlank()
+                        ) {
+                            Icon(
+                                Icons.Default.Send, "Send",
+                                tint = if (uiState.inputText.isBlank()) TextMuted else Background
+                            )
+                        }
                     }
                 }
             }

@@ -7,6 +7,7 @@ import com.kinetic.trainer.data.SessionManager
 import com.kinetic.trainer.data.models.ChatMessage
 import com.kinetic.trainer.data.repository.TrainerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +18,9 @@ import javax.inject.Inject
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val inputText: String = "",
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val sendError: String? = null,
+    val error: String? = null,
 )
 
 @HiltViewModel
@@ -38,9 +41,20 @@ class ChatViewModel @Inject constructor(
 
     private fun loadMessages() {
         viewModelScope.launch {
-            trainerRepository.observeChatMessages(clientId).collect { messages ->
-                _uiState.value = _uiState.value.copy(messages = messages, isLoading = false)
-            }
+            trainerRepository.observeChatMessages(clientId)
+                .catch { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = error.message ?: "Failed to load messages",
+                    )
+                }
+                .collect { messages ->
+                    _uiState.value = _uiState.value.copy(
+                        messages = messages,
+                        isLoading = false,
+                        error = null,
+                    )
+                }
         }
     }
 
@@ -62,10 +76,25 @@ class ChatViewModel @Inject constructor(
             )
             _uiState.value = _uiState.value.copy(
                 messages = _uiState.value.messages + message,
-                inputText = ""
+                inputText = "",
+                sendError = null,
+                error = null,
             )
-            trainerRepository.sendMessage(clientId, message)
-            onSent()
+            try {
+                trainerRepository.sendMessage(clientId, message)
+                onSent()
+            } catch (e: Exception) {
+                // Roll back the optimistic message and surface the error to the UI
+                _uiState.value = _uiState.value.copy(
+                    messages = _uiState.value.messages.filter { it.id != message.id },
+                    inputText = text,
+                    sendError = "Failed to send message. Please try again.",
+                )
+            }
         }
+    }
+
+    fun clearSendError() {
+        _uiState.value = _uiState.value.copy(sendError = null)
     }
 }

@@ -2,6 +2,7 @@ package com.kinetic.trainer.ui.viewmodels
 
 import com.google.common.truth.Truth.assertThat
 import com.kinetic.trainer.data.repository.ConsentPreferences
+import com.kinetic.trainer.data.repository.ConsentSource
 import com.kinetic.trainer.data.repository.DeletionStatusData
 import com.kinetic.trainer.data.repository.PrivacyRepository
 import io.mockk.coEvery
@@ -85,7 +86,7 @@ class PrivacyViewModelTest {
                 analyticsEnabled = true,
                 marketingEnabled = true,
                 crashReportingEnabled = true,
-                source = "trainer_settings_change",
+                source = ConsentSource.SETTINGS_CHANGE,
             )
         }
         assertThat(viewModel.uiState.value.message).isEqualTo("Consent preferences saved")

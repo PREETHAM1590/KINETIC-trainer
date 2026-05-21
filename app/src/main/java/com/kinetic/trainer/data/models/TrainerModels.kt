@@ -28,7 +28,11 @@ data class Exercise(
     val repsPerSet: Int,
     val targetWeightKg: Float,
     val notes: String = "",
-    val isRestrictedFor: List<BodyPart> = emptyList()
+    val isRestrictedFor: List<BodyPart> = emptyList(),
+    val imageUrls: List<String> = emptyList(),
+    val instructions: List<String> = emptyList(),
+    val primaryMuscles: List<String> = emptyList(),
+    val equipment: String = ""
 )
 
 data class CompletedExercise(

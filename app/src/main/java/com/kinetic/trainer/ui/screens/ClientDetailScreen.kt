@@ -77,6 +77,17 @@ fun ClientDetailScreen(
             }
         }
     ) { padding ->
+        if (uiState.error != null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.ErrorOutline, null, tint = Error, modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(uiState.error ?: "", color = Error, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            return@Scaffold
+        }
+
         if (detail == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Lime)

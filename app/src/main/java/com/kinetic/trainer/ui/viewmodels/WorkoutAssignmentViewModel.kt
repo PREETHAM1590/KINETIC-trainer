@@ -21,7 +21,8 @@ data class WorkoutAssignmentUiState(
     val selectedTab: WorkoutAssignmentTab = WorkoutAssignmentTab.TEMPLATES,
     val scratchExercises: List<Exercise> = emptyList(),
     val isLoading: Boolean = true,
-    val isSaved: Boolean = false
+    val isSaved: Boolean = false,
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -41,8 +42,16 @@ class WorkoutAssignmentViewModel @Inject constructor(
 
     private fun loadTemplates() {
         viewModelScope.launch {
-            val templates = trainerRepository.getWorkoutTemplates()
-            _uiState.value = _uiState.value.copy(templates = templates, isLoading = false)
+            try {
+                val templates = trainerRepository.getWorkoutTemplates()
+                _uiState.value = _uiState.value.copy(templates = templates, isLoading = false)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    templates = emptyList(),
+                    isLoading = false,
+                    error = e.message ?: "Failed to load workout templates"
+                )
+            }
         }
     }
 
@@ -63,29 +72,37 @@ class WorkoutAssignmentViewModel @Inject constructor(
 
     fun saveWorkout(targetClientId: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
-            val workout = AssignedWorkout(
-                clientId = targetClientId,
-                exercises = _uiState.value.scratchExercises,
-                assignedForDateMs = System.currentTimeMillis()
-            )
-            trainerRepository.assignWorkout(workout)
-            _uiState.value = _uiState.value.copy(isSaved = true)
-            onSuccess()
+            try {
+                val workout = AssignedWorkout(
+                    clientId = targetClientId,
+                    exercises = _uiState.value.scratchExercises,
+                    assignedForDateMs = System.currentTimeMillis()
+                )
+                trainerRepository.assignWorkout(workout)
+                _uiState.value = _uiState.value.copy(isSaved = true)
+                onSuccess()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Failed to save workout")
+            }
         }
     }
 
     fun assignTemplate(templateId: String, targetClientId: String, onSuccess: () -> Unit) {
         val template = _uiState.value.templates.find { it.id == templateId } ?: return
         viewModelScope.launch {
-            val workout = AssignedWorkout(
-                clientId = targetClientId,
-                exercises = template.exercises,
-                assignedForDateMs = System.currentTimeMillis(),
-                templateId = templateId
-            )
-            trainerRepository.assignWorkout(workout)
-            _uiState.value = _uiState.value.copy(isSaved = true)
-            onSuccess()
+            try {
+                val workout = AssignedWorkout(
+                    clientId = targetClientId,
+                    exercises = template.exercises,
+                    assignedForDateMs = System.currentTimeMillis(),
+                    templateId = templateId
+                )
+                trainerRepository.assignWorkout(workout)
+                _uiState.value = _uiState.value.copy(isSaved = true)
+                onSuccess()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message ?: "Failed to assign template")
+            }
         }
     }
 }

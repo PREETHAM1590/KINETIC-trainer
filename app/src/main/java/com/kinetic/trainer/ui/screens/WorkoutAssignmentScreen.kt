@@ -110,6 +110,23 @@ fun WorkoutAssignmentScreen(
                 }
             }
 
+            // Error banner
+            uiState.error?.let { errorMsg ->
+                Surface(
+                    color = Error.copy(alpha = 0.15f),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = errorMsg,
+                        color = Error,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
+
             when (selectedTab) {
                 0 -> TemplatesTab(uiState.templates) { template ->
                     viewModel.assignTemplate(template.id, clientId) { onAssigned() }
@@ -201,17 +218,12 @@ private fun ScratchTab(
             }
             items(exercises.size) { index ->
                 val ex = exercises[index]
-                KineticCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ExerciseAnimationCard(exercise = ex)
                     Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(ex.name, color = TextPrimary, fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold)
-                            Text("${ex.sets} sets × ${ex.repsPerSet} reps @ ${ex.targetWeightKg}kg",
-                                color = TextMuted, fontSize = 12.sp)
-                        }
                         IconButton(onClick = { onRemove(index) }) {
                             Icon(Icons.Default.Delete, null, tint = Error)
                         }

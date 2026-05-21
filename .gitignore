@@ -15,3 +15,7 @@ app/google-services.json
 .DS_Store
 Thumbs.db
 .gitnexus
+
+# Firebase config - inject per environment
+google-services.json
+
